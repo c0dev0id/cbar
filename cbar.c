@@ -25,6 +25,7 @@ static char cpu_avg_speed[24];
 static char volume[24];
 
 void update_volume() {
+    /* TODO: This should use sndiod and not the raw device */
     const wchar_t ico_vol = 0xF028; // 
     // Open the audio control device
     int fd = open("/dev/audioctl0", O_RDONLY);
@@ -76,7 +77,7 @@ void update_cpu_base_speed() {
     int temp;
     size_t templen = sizeof(temp);
 
-    int mib[5] = { CTL_HW, HW_CPUSPEED }; // Lenovo x1g10,13
+    int mib[5] = { CTL_HW, HW_CPUSPEED };
 
     if (sysctl(mib, 2, &temp, &templen, NULL, 0) == -1)
         snprintf(cpu_base_speed,sizeof(cpu_base_speed), "%lc N/A", ico_freq);
@@ -93,7 +94,7 @@ void update_cpu_avg_speed() {
     int i;
     for (i = 0; i < 24; i++) {
 
-        int mib[5] = { CTL_HW, HW_SENSORS, 0, SENSOR_FREQ, 0 }; // Lenovo x1g10,x13
+        int mib[5] = { CTL_HW, HW_SENSORS, 0, SENSOR_FREQ, 0 };
 
         if (sysctl(mib, 5, &sensor, &templen, NULL, 0) != -1) {
             count++;
@@ -113,7 +114,7 @@ void update_fan_speed() {
     // grab first sensor that provides SENSOR_FANRPM
     if (fan_mib == -1) {
         for (fan_mib=0; fan_mib<20; fan_mib++) {
-            int mib[5] = { CTL_HW, HW_SENSORS, fan_mib, SENSOR_FANRPM, 0 }; // acpitz0.temp0 (x13)
+            int mib[5] = { CTL_HW, HW_SENSORS, fan_mib, SENSOR_FANRPM, 0 };
             if (sysctl(mib, 5, &sensor, &templen, NULL, 0) != -1)
                 break;
         }
@@ -236,6 +237,7 @@ void update_battery() {
 
 int main(int argc, const char *argv[])
 {
+
     setlocale(LC_CTYPE, "C");
     setlocale(LC_ALL, "en_US.UTF-8");
 
@@ -265,10 +267,9 @@ int main(int argc, const char *argv[])
         printf("\n");
 
         fflush(stdout);
-        if(argc == 2) {
+        if(argc == 2)
            if(strcmp("-1", argv[1]) >= 0)
                 return 0;
-        }
         usleep(1000000);
     }
     return 0;
