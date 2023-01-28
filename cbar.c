@@ -3,7 +3,6 @@
 #include <wchar.h>
 #include <stdlib.h>
 #include <string.h>
-
 #include <fcntl.h>
 
 #include <sys/time.h>
@@ -11,18 +10,15 @@
 #include <sys/ioctl.h>
 #include <sys/sensors.h>
 #include <sys/audioio.h>
-
 #include <machine/apmvar.h>
-
 #include <locale.h>
 
-
-static char battery_percent[24];
-static char cpu_temp[24];
-static char fan_speed[24];
-static char cpu_base_speed[24];
-static char cpu_avg_speed[24];
-static char volume[24];
+static char battery_percent[32];
+static char cpu_temp[32];
+static char fan_speed[32];
+static char cpu_base_speed[32];
+static char cpu_avg_speed[32];
+static char volume[32];
 
 void update_volume() {
     /* TODO: This should use sndiod and not the raw device */
@@ -48,7 +44,7 @@ void update_volume() {
     }
     if (output_master == -1) {
         fprintf(stderr, "Mixer control not found\n");
-        snprintf(volume,sizeof(volume), "%lc N/A (mixerctl", ico_vol);
+        snprintf(volume,sizeof(volume), "%lc N/A", ico_vol);
         close(fd);
         return;
     }
@@ -58,7 +54,7 @@ void update_volume() {
     ctl.dev = output_master;
     ctl.type = AUDIO_MIXER_VALUE;
     if (ioctl(fd, AUDIO_MIXER_READ, &ctl) == -1) {
-        snprintf(volume,sizeof(volume), "%lc N/A (value)", ico_vol);
+        snprintf(volume,sizeof(volume), "%lc N/A", ico_vol);
         close(fd);
         return;
     }
@@ -124,7 +120,10 @@ void update_fan_speed() {
     if (sysctl(mib, 5, &sensor, &templen, NULL, 0) != -1)
         temp = sensor.value;
 
-    snprintf(fan_speed,sizeof(fan_speed), "%lc %dRPM", ico_fan, temp);
+    if(temp>4200)
+        snprintf(fan_speed,sizeof(fan_speed), "+@fg=1;%lc %dRPM+@fg=0;", ico_fan, temp);
+    else
+        snprintf(fan_speed,sizeof(fan_speed), "%lc %dRPM", ico_fan, temp);
 }
 
 void update_cpu_temp() {
@@ -164,8 +163,11 @@ void update_cpu_temp() {
         ico_temp = ico_25;
     else
         ico_temp = ico_low;
-    snprintf(cpu_temp,sizeof(battery_percent),
-            "%lc %dC", ico_temp, temp);
+
+    if(temp>70)
+        snprintf(cpu_temp,sizeof(battery_percent), "+@fg=1;%lc %dC+@fg=0;", ico_temp, temp);
+    else
+        snprintf(cpu_temp,sizeof(battery_percent), "%lc %dC", ico_temp, temp);
 }
 
 void update_battery() {
@@ -231,7 +233,11 @@ void update_battery() {
     else
       ico_buf = ico_empty;
 
-    snprintf(battery_percent,sizeof(battery_percent),
+    if(pi.battery_life<10)
+        snprintf(battery_percent,sizeof(battery_percent),
+            "+@fg=1;%lc%lc %d%%+@fg=0;", ico_chr_buf, ico_buf, pi.battery_life);
+    else
+        snprintf(battery_percent,sizeof(battery_percent),
             "%lc%lc %d%%", ico_chr_buf, ico_buf, pi.battery_life);
 }
 
