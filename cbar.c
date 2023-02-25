@@ -28,6 +28,7 @@ void update_volume() {
     double temp = 0;
     if (fd == -1) {
         close(fd);
+        snprintf(volume,sizeof(volume), "%lc N/A", ico_vol);
         return;
     }
 
@@ -120,10 +121,7 @@ void update_fan_speed() {
     if (sysctl(mib, 5, &sensor, &templen, NULL, 0) != -1)
         temp = sensor.value;
 
-    if(temp>4200)
-        snprintf(fan_speed,sizeof(fan_speed), "+@fg=1;%lc %dRPM+@fg=0;", ico_fan, temp);
-    else
-        snprintf(fan_speed,sizeof(fan_speed), "%lc %dRPM", ico_fan, temp);
+    snprintf(fan_speed,sizeof(fan_speed), "%lc %dRPM", ico_fan, temp);
 }
 
 void update_cpu_temp() {
@@ -164,10 +162,7 @@ void update_cpu_temp() {
     else
         ico_temp = ico_low;
 
-    if(temp>70)
-        snprintf(cpu_temp,sizeof(battery_percent), "+@fg=1;%lc %dC+@fg=0;", ico_temp, temp);
-    else
-        snprintf(cpu_temp,sizeof(battery_percent), "%lc %dC", ico_temp, temp);
+    snprintf(cpu_temp,sizeof(battery_percent), "%lc %dC", ico_temp, temp);
 }
 
 void update_battery() {
@@ -233,12 +228,8 @@ void update_battery() {
     else
       ico_buf = ico_empty;
 
-    if(pi.battery_life<10)
-        snprintf(battery_percent,sizeof(battery_percent),
-            "+@fg=1;%lc%lc %d%%+@fg=0;", ico_chr_buf, ico_buf, pi.battery_life);
-    else
-        snprintf(battery_percent,sizeof(battery_percent),
-            "%lc%lc %d%%", ico_chr_buf, ico_buf, pi.battery_life);
+    snprintf(battery_percent,sizeof(battery_percent),
+        "%lc%lc %d%%", ico_chr_buf, ico_buf, pi.battery_life);
 }
 
 int main(int argc, const char *argv[])
