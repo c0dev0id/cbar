@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <fcntl.h>
+#include <time.h>
+#include <stdbool.h>
 
 #include <sys/time.h>
 #include <sys/sysctl.h>
@@ -13,22 +15,38 @@
 #include <machine/apmvar.h>
 #include <locale.h>
 
+#include <sndio.h>
+
 static char battery_percent[32];
 static char cpu_temp[32];
 static char fan_speed[32];
 static char cpu_base_speed[32];
 static char cpu_avg_speed[32];
 static char volume[32];
+static char datetime[32];
+
+static bool battery_onpower = false;
+
+void update_volume2() {
+    struct sioctl_hdl *hdl;
+    char *devname = SIO_DEVANY;
+    hdl = sioctl_open(devname, SIOCTL_READ | SIOCTL_WRITE, 0);
+    if (hdl == NULL) {
+        snprintf(volume,sizeof(volume), "N/A");
+        sioctl_close(hdl);
+        return;
+    }
+    sioctl_close(hdl);
+}
 
 void update_volume() {
     /* TODO: This should use sndiod and not the raw device */
-    const wchar_t ico_vol = 0xF028; // 
     // Open the audio control device
     int fd = open("/dev/audioctl0", O_RDONLY);
     double temp = 0;
     if (fd == -1) {
         close(fd);
-        snprintf(volume,sizeof(volume), "%lc N/A", ico_vol);
+        snprintf(volume,sizeof(volume), "N/A");
         return;
     }
 
@@ -45,7 +63,7 @@ void update_volume() {
     }
     if (output_master == -1) {
         fprintf(stderr, "Mixer control not found\n");
-        snprintf(volume,sizeof(volume), "%lc N/A", ico_vol);
+        snprintf(volume,sizeof(volume), "N/A");
         close(fd);
         return;
     }
@@ -55,7 +73,7 @@ void update_volume() {
     ctl.dev = output_master;
     ctl.type = AUDIO_MIXER_VALUE;
     if (ioctl(fd, AUDIO_MIXER_READ, &ctl) == -1) {
-        snprintf(volume,sizeof(volume), "%lc N/A", ico_vol);
+        snprintf(volume,sizeof(volume), "N/A");
         close(fd);
         return;
     }
@@ -66,20 +84,19 @@ void update_volume() {
         temp = (ctl.un.value.level[AUDIO_MIXER_LEVEL_LEFT] +
                 ctl.un.value.level[AUDIO_MIXER_LEVEL_RIGHT]) / 2;
 
-    snprintf(volume,sizeof(volume), "%lc %3.0f%%", ico_vol, (temp / 255) * 100);
+    snprintf(volume,sizeof(volume), "%.0f%%", (temp / 255) * 100);
 }
 
 void update_cpu_base_speed() {
-    const wchar_t ico_freq = 0xE234; // 
     int temp;
     size_t templen = sizeof(temp);
 
     int mib[5] = { CTL_HW, HW_CPUSPEED };
 
     if (sysctl(mib, 2, &temp, &templen, NULL, 0) == -1)
-        snprintf(cpu_base_speed,sizeof(cpu_base_speed), "%lc N/A", ico_freq);
+        snprintf(cpu_base_speed,sizeof(cpu_base_speed), "no_freq");
     else
-        snprintf(cpu_base_speed,sizeof(cpu_base_speed), "%lc %4dMhz", ico_freq, temp);
+        snprintf(cpu_base_speed,sizeof(cpu_base_speed), "%4dMhz", temp);
 }
 
 void update_cpu_avg_speed() {
@@ -104,7 +121,6 @@ void update_cpu_avg_speed() {
 void update_fan_speed() {
     struct sensor sensor;
     size_t templen = sizeof(sensor);
-    const wchar_t ico_fan =  0xF70F; // 
     int temp = -1;
     static int fan_mib = -1;
 
@@ -121,7 +137,7 @@ void update_fan_speed() {
     if (sysctl(mib, 5, &sensor, &templen, NULL, 0) != -1)
         temp = sensor.value;
 
-    snprintf(fan_speed,sizeof(fan_speed), "%lc %dRPM", ico_fan, temp);
+    snprintf(fan_speed,sizeof(fan_speed), "%dRPM", temp);
 }
 
 void update_cpu_temp() {
@@ -129,12 +145,6 @@ void update_cpu_temp() {
     size_t templen = sizeof(sensor);
     int temp = -1;
 
-    const wchar_t ico_low =  0xF2CB; // 
-    const wchar_t ico_25 =  0xF2CA; // 
-    const wchar_t ico_50 =  0xF2C9; // 
-    const wchar_t ico_75 =  0xF2C8; // 
-    const wchar_t ico_high =  0xF2C7; // 
-    wchar_t ico_temp = 0xF2C9;
     static int temp_mib = -1;
 
     // grab first sensor that provides SENSOR_TEMP
@@ -151,42 +161,12 @@ void update_cpu_temp() {
         temp = (sensor.value  - 273150000) / 1000000.0;
     }
 
-    if(temp > 80)
-        ico_temp = ico_high;
-    else if (temp > 72)
-        ico_temp = ico_75;
-    else if (temp > 62)
-        ico_temp = ico_50;
-    else if (temp > 42)
-        ico_temp = ico_25;
-    else
-        ico_temp = ico_low;
-
-    snprintf(cpu_temp,sizeof(battery_percent), "%lc %dC", ico_temp, temp);
+    snprintf(cpu_temp,sizeof(battery_percent), "%d°C", temp);
 }
 
 void update_battery() {
     int fd;
     struct apm_power_info pi;
-
-    const wchar_t ico_empty =  0xF58D; // 
-    const wchar_t ico_10 =  0xF579; // 
-    const wchar_t ico_20 =  0xF57A; // 
-    const wchar_t ico_30 =  0xF57B; // 
-    const wchar_t ico_40 =  0xF57C; // 
-    const wchar_t ico_50 =  0xF57D; // 
-    const wchar_t ico_60 =  0xF57E; // 
-    const wchar_t ico_70 =  0xF57F; // 
-    const wchar_t ico_80 =  0xF580; // 
-    const wchar_t ico_90 =  0xF581; // 
-    const wchar_t ico_full =  0xF578; // 
-
-    const wchar_t ico_chr =  0xE00A; // 
-
-    const wchar_t ico_unknown = 0xF590; // 
-
-    wchar_t ico_buf = ico_unknown;
-    wchar_t ico_chr_buf = 0x20;
 
     if ((fd = open("/dev/apm", O_RDONLY)) == -1 ||
             ioctl(fd, APM_IOC_GETPOWER, &pi) == -1 ||
@@ -200,36 +180,20 @@ void update_battery() {
         strlcpy(battery_percent, "N/A", sizeof(battery_percent));
         return;
     }
-    if(pi.ac_state == APM_AC_ON)
-        ico_chr_buf = ico_chr;
-    else
-        ico_chr_buf = 0x20;
-
-    if(pi.battery_life > 94)
-        ico_buf = ico_full;
-    else if(pi.battery_life > 90)
-      ico_buf = ico_90;
-    else if(pi.battery_life > 80)
-      ico_buf = ico_80;
-    else if(pi.battery_life > 70)
-      ico_buf = ico_70;
-    else if(pi.battery_life > 60)
-      ico_buf = ico_60;
-    else if(pi.battery_life > 50)
-      ico_buf = ico_50;
-    else if(pi.battery_life > 40)
-      ico_buf = ico_40;
-    else if(pi.battery_life > 30)
-      ico_buf = ico_30;
-    else if(pi.battery_life > 20)
-      ico_buf = ico_20;
-    else if(pi.battery_life > 10)
-      ico_buf = ico_10;
-    else
-      ico_buf = ico_empty;
-
+    if(pi.ac_state == APM_AC_ON) {
+        battery_onpower = true;
+    } else {
+        battery_onpower = false;
+    }
     snprintf(battery_percent,sizeof(battery_percent),
-        "%lc%lc %d%%", ico_chr_buf, ico_buf, pi.battery_life);
+        "%d%%", pi.battery_life);
+}
+void update_datetime() {
+    time_t rawtime;
+    struct tm * timeinfo;
+    time ( &rawtime );
+    timeinfo = localtime ( &rawtime );
+    strftime(datetime,sizeof(datetime),"%d %b %Y %H:%M", timeinfo);
 }
 
 int main(int argc, const char *argv[])
@@ -238,8 +202,16 @@ int main(int argc, const char *argv[])
     setlocale(LC_CTYPE, "C");
     setlocale(LC_ALL, "en_US.UTF-8");
 
-    const wchar_t sep =  0xE621; // 
-    const wchar_t time = 0xE383; // 
+    //const wchar_t sep =  0xE621; // 
+    //const char sep =  '|';
+    const wchar_t ico_time = 0xE383; // 
+    const wchar_t ico_fire = 0xF2DB; //  
+    const wchar_t ico_tacho = 0xF0E4; // 
+    const wchar_t ico_temp = 0xF2C7; // 
+    const wchar_t ico_volume = 0xEB75; // 
+
+    wchar_t ico_battery;
+
 
     while(1) {
 
@@ -249,18 +221,32 @@ int main(int argc, const char *argv[])
         update_cpu_base_speed();
         update_fan_speed();
         update_volume();
+        update_datetime();
 
-        printf("%s", battery_percent);
-        printf(" %lc ", sep);
-        printf("%s", cpu_temp);
-        printf(" %lc ", sep);
-        printf("%s (~%s)", cpu_base_speed, cpu_avg_speed);
-        printf(" %lc ", sep);
-        printf("%s", fan_speed);
-        printf(" %lc ", sep);
-        printf("%s", volume);
-        printf(" %lc ", sep);
-        printf("%lc ", time);
+        if(battery_onpower) {
+            ico_battery = 0xF1E6; // 
+        } else {
+            ico_battery = 0xF240; // 
+        }
+
+        printf(" %lc ", ico_battery);
+        printf(" %s ", battery_percent);
+
+        printf(" %lc ", ico_temp);
+        printf(" %s ", cpu_temp);
+
+        printf(" %lc ", ico_fire);
+        printf(" %s ", cpu_avg_speed);
+
+        printf(" %lc ", ico_tacho);
+        printf(" %s ", fan_speed);
+
+        printf(" %lc ", ico_volume);
+        printf(" %s ", volume);
+
+        printf(" %lc ", ico_time);
+        printf(" %s", datetime);
+
         printf("\n");
 
         fflush(stdout);
