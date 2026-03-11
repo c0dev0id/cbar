@@ -11,11 +11,11 @@
 #include <sys/sysctl.h>
 #include <sys/ioctl.h>
 #include <sys/sensors.h>
-#include <sys/audioio.h>
 #include <machine/apmvar.h>
 #include <locale.h>
 
 #include <sndio.h>
+
 
 static char battery_percent[32];
 static char cpu_temp[32];
@@ -27,64 +27,45 @@ static char datetime[32];
 
 static bool battery_onpower = false;
 
-void update_volume2() {
-    struct sioctl_hdl *hdl;
-    char *devname = SIO_DEVANY;
-    hdl = sioctl_open(devname, SIOCTL_READ | SIOCTL_WRITE, 0);
-    if (hdl == NULL) {
-        snprintf(volume,sizeof(volume), "N/A");
-        sioctl_close(hdl);
+struct vol_ctx {
+    unsigned int maxval;
+    unsigned int val;
+    int found;
+};
+
+static void
+vol_ondesc(void *arg, struct sioctl_desc *desc, int curval)
+{
+    struct vol_ctx *ctx = arg;
+    if (desc == NULL || ctx->found)
         return;
+    if (desc->type == SIOCTL_NUM &&
+        strcmp(desc->func, "level") == 0 &&
+        strcmp(desc->node0.name, "output") == 0) {
+        ctx->maxval = desc->maxval;
+        ctx->val = (unsigned int)curval;
+        ctx->found = 1;
     }
-    sioctl_close(hdl);
 }
 
 void update_volume() {
-    /* TODO: This should use sndiod and not the raw device */
-    // Open the audio control device
-    int fd = open("/dev/audioctl0", O_RDONLY);
-    double temp = 0;
-    if (fd == -1) {
-        close(fd);
-        snprintf(volume,sizeof(volume), "N/A");
+    struct sioctl_hdl *hdl;
+    struct vol_ctx ctx = {0};
+
+    hdl = sioctl_open(SIO_DEVANY, SIOCTL_READ, 0);
+    if (hdl == NULL) {
+        snprintf(volume, sizeof(volume), "N/A");
         return;
     }
+    sioctl_ondesc(hdl, vol_ondesc, &ctx);
+    sioctl_close(hdl);
 
-    // Find the "output.master" mixer control
-    int output_master = -1;
-    mixer_devinfo_t mixer_info;
-    mixer_info.index = 0;
-    while (ioctl(fd, AUDIO_MIXER_DEVINFO, &mixer_info) == 0) {
-        if (strcmp(mixer_info.label.name, "master") == 0) {
-            output_master = mixer_info.index;
-            break;
-        }
-        mixer_info.index++;
-    }
-    if (output_master == -1) {
-        fprintf(stderr, "Mixer control not found\n");
-        snprintf(volume,sizeof(volume), "N/A");
-        close(fd);
+    if (!ctx.found || ctx.maxval == 0) {
+        snprintf(volume, sizeof(volume), "N/A");
         return;
     }
-
-    // Get the value of the "output.master" mixer control
-    mixer_ctrl_t ctl;
-    ctl.dev = output_master;
-    ctl.type = AUDIO_MIXER_VALUE;
-    if (ioctl(fd, AUDIO_MIXER_READ, &ctl) == -1) {
-        snprintf(volume,sizeof(volume), "N/A");
-        close(fd);
-        return;
-    }
-    close(fd);
-    if (ctl.un.value.num_channels == 1)
-        temp = ctl.un.value.level[AUDIO_MIXER_LEVEL_MONO];
-    else
-        temp = (ctl.un.value.level[AUDIO_MIXER_LEVEL_LEFT] +
-                ctl.un.value.level[AUDIO_MIXER_LEVEL_RIGHT]) / 2;
-
-    snprintf(volume,sizeof(volume), "%.0f%%", (temp / 255) * 100);
+    snprintf(volume, sizeof(volume), "%.0f%%",
+        (ctx.val * 100.0) / ctx.maxval);
 }
 
 void update_cpu_base_speed() {
@@ -108,14 +89,17 @@ void update_cpu_avg_speed() {
     int i;
     for (i = 0; i < 24; i++) {
 
-        int mib[5] = { CTL_HW, HW_SENSORS, 0, SENSOR_FREQ, 0 };
+        int mib[5] = { CTL_HW, HW_SENSORS, i, SENSOR_FREQ, 0 };
 
         if (sysctl(mib, 5, &sensor, &templen, NULL, 0) != -1) {
             count++;
             temp += ( sensor.value / 1000000 / 1000000 );
         }
     }
-    snprintf(cpu_avg_speed,sizeof(cpu_avg_speed), "%4dMhz", temp / count);
+    if (count == 0)
+        snprintf(cpu_avg_speed, sizeof(cpu_avg_speed), "N/A");
+    else
+        snprintf(cpu_avg_speed,sizeof(cpu_avg_speed), "%4dMhz", temp / count);
 }
 
 void update_fan_speed() {
@@ -161,7 +145,7 @@ void update_cpu_temp() {
         temp = (sensor.value  - 273150000) / 1000000.0;
     }
 
-    snprintf(cpu_temp,sizeof(battery_percent), "%d°C", temp);
+    snprintf(cpu_temp,sizeof(cpu_temp), "%d°C", temp);
 }
 
 void update_battery() {
@@ -204,11 +188,11 @@ int main(int argc, const char *argv[])
 
     //const wchar_t sep =  0xE621; // 
     //const char sep =  '|';
-    const wchar_t ico_time = 0xE383; // 
+    const wchar_t ico_time = 0xF455; // 
     const wchar_t ico_fire = 0xF2DB; //  
     const wchar_t ico_tacho = 0xF0E4; // 
     const wchar_t ico_temp = 0xF2C7; // 
-    const wchar_t ico_volume = 0xEB75; // 
+    const wchar_t ico_volume = 0xF028; // 
 
     wchar_t ico_battery;
 
@@ -230,28 +214,28 @@ int main(int argc, const char *argv[])
         }
 
         printf(" %lc ", ico_battery);
-        printf(" %s ", battery_percent);
+        printf("%s ", battery_percent);
 
         printf(" %lc ", ico_temp);
-        printf(" %s ", cpu_temp);
+        printf("%s ", cpu_temp);
 
         printf(" %lc ", ico_fire);
-        printf(" %s ", cpu_avg_speed);
+        printf("%s ", cpu_avg_speed);
 
         printf(" %lc ", ico_tacho);
-        printf(" %s ", fan_speed);
+        printf("%s ", fan_speed);
 
         printf(" %lc ", ico_volume);
-        printf(" %s ", volume);
+        printf("%s ", volume);
 
         printf(" %lc ", ico_time);
-        printf(" %s", datetime);
+        printf("%s", datetime);
 
         printf("\n");
 
         fflush(stdout);
         if(argc == 2)
-           if(strcmp("-1", argv[1]) >= 0)
+           if(strcmp("-1", argv[1]) == 0)
                 return 0;
         usleep(1000000);
     }
