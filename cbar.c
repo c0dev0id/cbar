@@ -80,23 +80,30 @@ void update_cpu_base_speed() {
 void update_cpu_avg_speed() {
     struct sensor sensor;
     size_t templen = sizeof(sensor);
-    int count = 0;
-    uint temp = 0;
+    static int freq_mibs[24];
+    static int freq_count = -1;
 
-    int i;
-    for (i = 0; i < 24; i++) {
-
-        int mib[5] = { CTL_HW, HW_SENSORS, i, SENSOR_FREQ, 0 };
-
-        if (sysctl(mib, 5, &sensor, &templen, NULL, 0) != -1) {
-            count++;
-            temp += ( sensor.value / 1000000 / 1000000 );
+    if (freq_count == -1) {
+        freq_count = 0;
+        for (int i = 0; i < 24; i++) {
+            int mib[5] = { CTL_HW, HW_SENSORS, i, SENSOR_FREQ, 0 };
+            if (sysctl(mib, 5, &sensor, &templen, NULL, 0) != -1)
+                freq_mibs[freq_count++] = i;
         }
     }
-    if (count == 0)
+
+    if (freq_count == 0) {
         snprintf(cpu_avg_speed, sizeof(cpu_avg_speed), "N/A");
-    else
-        snprintf(cpu_avg_speed,sizeof(cpu_avg_speed), "%4dMhz", temp / count);
+        return;
+    }
+
+    uint temp = 0;
+    for (int i = 0; i < freq_count; i++) {
+        int mib[5] = { CTL_HW, HW_SENSORS, freq_mibs[i], SENSOR_FREQ, 0 };
+        if (sysctl(mib, 5, &sensor, &templen, NULL, 0) != -1)
+            temp += sensor.value / 1000000 / 1000000;
+    }
+    snprintf(cpu_avg_speed, sizeof(cpu_avg_speed), "%4dMhz", temp / freq_count);
 }
 
 void update_fan_speed() {
