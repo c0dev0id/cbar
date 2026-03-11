@@ -29,7 +29,7 @@ static char datetime[32];
 static bool battery_onpower = false;
 static int  battery_life = -1;
 static int  cpu_temp_val = -1;
-static bool color_mode = false;
+static bool color_mode = true;
 
 struct vol_ctx {
     unsigned int addr;
@@ -245,7 +245,7 @@ int main(int argc, const char *argv[])
     int one_shot = 0;
     for (int i = 1; i < argc; i++) {
         if (strcmp("-1", argv[i]) == 0) one_shot = 1;
-        if (strcmp("-c", argv[i]) == 0) color_mode = true;
+        if (strcmp("-m", argv[i]) == 0) color_mode = false;
     }
 
     strlcpy(volume, "N/A", sizeof(volume));
