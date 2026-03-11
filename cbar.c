@@ -48,7 +48,7 @@ static void
 vol_ondesc(void *arg, struct sioctl_desc *desc, int curval)
 {
     struct vol_ctx *ctx = arg;
-    if (desc == NULL || ctx->found)
+    if (desc == NULL)
         return;
     if (desc->type == SIOCTL_NUM &&
         strcmp(desc->func, "level") == 0 &&
