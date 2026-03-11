@@ -27,6 +27,8 @@ static char volume[32];
 static char datetime[32];
 
 static bool battery_onpower = false;
+static int  battery_life = -1;
+static bool color_mode = false;
 
 struct vol_ctx {
     unsigned int addr;
@@ -163,8 +165,8 @@ void update_battery() {
     } else {
         battery_onpower = false;
     }
-    snprintf(battery_percent,sizeof(battery_percent),
-        "%d%%", pi.battery_life);
+    battery_life = pi.battery_life;
+    snprintf(battery_percent, sizeof(battery_percent), "%d%%", pi.battery_life);
 }
 
 void update_datetime() {
@@ -181,8 +183,14 @@ print_status(wchar_t ico_time, wchar_t ico_fire, wchar_t ico_tacho,
 {
     wchar_t ico_battery = battery_onpower ? (wchar_t)0xF1E6 : (wchar_t)0xF240;
 
+    if (color_mode && battery_life >= 0 && battery_life < 10)
+        printf("+@fg=1;");
+    else if (color_mode && battery_life >= 0 && battery_life < 20)
+        printf("+@fg=3;");
     printf(" %lc ", ico_battery);
     printf("%s ", battery_percent);
+    if (color_mode && battery_life >= 0 && battery_life < 20)
+        printf("+@fg=0;");
 
     printf(" %lc ", ico_temp);
     printf("%s ", cpu_temp);
@@ -214,7 +222,11 @@ int main(int argc, const char *argv[])
     const wchar_t ico_temp   = 0xF2C7;
     const wchar_t ico_volume = 0xF028;
 
-    int one_shot = (argc == 2 && strcmp("-1", argv[1]) == 0);
+    int one_shot = 0;
+    for (int i = 1; i < argc; i++) {
+        if (strcmp("-1", argv[i]) == 0) one_shot = 1;
+        if (strcmp("-c", argv[i]) == 0) color_mode = true;
+    }
 
     strlcpy(volume, "N/A", sizeof(volume));
     vol_hdl = sioctl_open(SIO_DEVANY, SIOCTL_READ, 0);
