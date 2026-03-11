@@ -253,14 +253,10 @@ int main(int argc, const char *argv[])
     if (vol_hdl != NULL) {
         sioctl_ondesc(vol_hdl, vol_ondesc, &vol_state);
         sioctl_onval(vol_hdl, vol_onval, &vol_state);
-        /* Drain sndiod's initial async response before first print */
-        struct pollfd pfds[8];
-        int nfds = sioctl_pollfd(vol_hdl, pfds, POLLIN);
-        while (!vol_state.found) {
-            if (poll(pfds, nfds, 200) <= 0)
-                break;
-            sioctl_revents(vol_hdl, pfds);
-        }
+        /* vol_ondesc sets val from curval synchronously; compute string now */
+        if (vol_state.found && vol_state.maxval > 0)
+            snprintf(volume, sizeof(volume), "%.0f%%",
+                (vol_state.val * 100.0) / vol_state.maxval);
     }
 
     update_battery();
