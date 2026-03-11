@@ -248,6 +248,14 @@ int main(int argc, const char *argv[])
     if (vol_hdl != NULL) {
         sioctl_ondesc(vol_hdl, vol_ondesc, &vol_state);
         sioctl_onval(vol_hdl, vol_onval, &vol_state);
+        /* Drain sndiod's initial async response before first print */
+        struct pollfd pfds[8];
+        int nfds = sioctl_pollfd(vol_hdl, pfds, POLLIN);
+        while (!vol_state.found) {
+            if (poll(pfds, nfds, 200) <= 0)
+                break;
+            sioctl_revents(vol_hdl, pfds);
+        }
     }
 
     update_battery();
