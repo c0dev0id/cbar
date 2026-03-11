@@ -28,6 +28,7 @@ static char datetime[32];
 
 static bool battery_onpower = false;
 static int  battery_life = -1;
+static int  cpu_temp_val = -1;
 static bool color_mode = false;
 
 struct vol_ctx {
@@ -137,11 +138,11 @@ void update_cpu_temp() {
     }
 
     int mib[5] = { CTL_HW, HW_SENSORS, temp_mib, SENSOR_TEMP, 0 };
-    if (sysctl(mib, 5, &sensor, &templen, NULL, 0) != -1) {
-        temp = (sensor.value  - 273150000) / 1000000.0;
-    }
+    if (sysctl(mib, 5, &sensor, &templen, NULL, 0) != -1)
+        temp = (sensor.value - 273150000) / 1000000.0;
 
-    snprintf(cpu_temp,sizeof(cpu_temp), "%d°C", temp);
+    cpu_temp_val = temp;
+    snprintf(cpu_temp, sizeof(cpu_temp), "%d°C", temp);
 }
 
 void update_battery() {
@@ -192,8 +193,14 @@ print_status(wchar_t ico_time, wchar_t ico_fire, wchar_t ico_tacho,
     if (color_mode && battery_life >= 0 && battery_life < 20)
         printf("+@fg=0;");
 
+    if (color_mode && cpu_temp_val >= 78)
+        printf("+@fg=1;");
+    else if (color_mode && cpu_temp_val >= 68)
+        printf("+@fg=3;");
     printf(" %lc ", ico_temp);
     printf("%s ", cpu_temp);
+    if (color_mode && cpu_temp_val >= 68)
+        printf("+@fg=0;");
 
     printf(" %lc ", ico_fire);
     printf("%s ", cpu_avg_speed);
