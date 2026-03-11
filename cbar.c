@@ -36,6 +36,9 @@ struct vol_ctx {
     unsigned int maxval;
     unsigned int val;
     int found;
+    unsigned int mute_addr;
+    int muted;
+    int mute_found;
 };
 
 static struct sioctl_hdl *vol_hdl;
@@ -55,6 +58,13 @@ vol_ondesc(void *arg, struct sioctl_desc *desc, int curval)
         ctx->val = (unsigned int)curval;
         ctx->found = 1;
     }
+    if (desc->type == SIOCTL_SW &&
+        strcmp(desc->func, "mute") == 0 &&
+        strcmp(desc->node0.name, "output") == 0) {
+        ctx->mute_addr = desc->addr;
+        ctx->muted = curval;
+        ctx->mute_found = 1;
+    }
 }
 
 static void
@@ -65,6 +75,8 @@ vol_onval(void *arg, unsigned int addr, unsigned int val)
         ctx->val = val;
         snprintf(volume, sizeof(volume), "%.0f%%", (val * 100.0) / ctx->maxval);
     }
+    if (ctx->mute_found && addr == ctx->mute_addr)
+        ctx->muted = val;
 }
 
 void update_cpu_base_speed() {
@@ -218,7 +230,7 @@ print_status(wchar_t ico_time, wchar_t ico_fire, wchar_t ico_tacho,
     printf(" %lc ", ico_tacho);
     printf("%s ", fan_speed);
 
-    wchar_t ico_vol = (vol_state.found && vol_state.val == 0)
+    wchar_t ico_vol = (vol_state.muted || (vol_state.found && vol_state.val == 0))
         ? (wchar_t)0xF6A9   /* volume-mute (speaker with ×) */
         : ico_volume;
     printf(" %lc ", ico_vol);
