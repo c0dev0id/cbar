@@ -13,6 +13,7 @@
 #include <sys/sensors.h>
 #include <machine/apmvar.h>
 #include <locale.h>
+#include <poll.h>
 
 #include <sndio.h>
 
@@ -28,10 +29,14 @@ static char datetime[32];
 static bool battery_onpower = false;
 
 struct vol_ctx {
+    unsigned int addr;
     unsigned int maxval;
     unsigned int val;
     int found;
 };
+
+static struct sioctl_hdl *vol_hdl;
+static struct vol_ctx vol_state;
 
 static void
 vol_ondesc(void *arg, struct sioctl_desc *desc, int curval)
@@ -42,30 +47,19 @@ vol_ondesc(void *arg, struct sioctl_desc *desc, int curval)
     if (desc->type == SIOCTL_NUM &&
         strcmp(desc->func, "level") == 0 &&
         strcmp(desc->node0.name, "output") == 0) {
+        ctx->addr = desc->addr;
         ctx->maxval = desc->maxval;
         ctx->val = (unsigned int)curval;
         ctx->found = 1;
     }
 }
 
-void update_volume() {
-    struct sioctl_hdl *hdl;
-    struct vol_ctx ctx = {0};
-
-    hdl = sioctl_open(SIO_DEVANY, SIOCTL_READ, 0);
-    if (hdl == NULL) {
-        snprintf(volume, sizeof(volume), "N/A");
-        return;
-    }
-    sioctl_ondesc(hdl, vol_ondesc, &ctx);
-    sioctl_close(hdl);
-
-    if (!ctx.found || ctx.maxval == 0) {
-        snprintf(volume, sizeof(volume), "N/A");
-        return;
-    }
-    snprintf(volume, sizeof(volume), "%.0f%%",
-        (ctx.val * 100.0) / ctx.maxval);
+static void
+vol_onval(void *arg, unsigned int addr, unsigned int val)
+{
+    struct vol_ctx *ctx = arg;
+    if (ctx->found && addr == ctx->addr)
+        snprintf(volume, sizeof(volume), "%.0f%%", (val * 100.0) / ctx->maxval);
 }
 
 void update_cpu_base_speed() {
@@ -172,6 +166,7 @@ void update_battery() {
     snprintf(battery_percent,sizeof(battery_percent),
         "%d%%", pi.battery_life);
 }
+
 void update_datetime() {
     time_t rawtime;
     struct tm * timeinfo;
@@ -180,64 +175,93 @@ void update_datetime() {
     strftime(datetime,sizeof(datetime),"%d %b %Y %H:%M", timeinfo);
 }
 
+static void
+print_status(wchar_t ico_time, wchar_t ico_fire, wchar_t ico_tacho,
+    wchar_t ico_temp, wchar_t ico_volume)
+{
+    wchar_t ico_battery = battery_onpower ? (wchar_t)0xF1E6 : (wchar_t)0xF240;
+
+    printf(" %lc ", ico_battery);
+    printf("%s ", battery_percent);
+
+    printf(" %lc ", ico_temp);
+    printf("%s ", cpu_temp);
+
+    printf(" %lc ", ico_fire);
+    printf("%s ", cpu_avg_speed);
+
+    printf(" %lc ", ico_tacho);
+    printf("%s ", fan_speed);
+
+    printf(" %lc ", ico_volume);
+    printf("%s ", volume);
+
+    printf(" %lc ", ico_time);
+    printf("%s", datetime);
+
+    printf("\n");
+    fflush(stdout);
+}
+
 int main(int argc, const char *argv[])
 {
-
     setlocale(LC_CTYPE, "C");
     setlocale(LC_ALL, "en_US.UTF-8");
 
-    //const wchar_t sep =  0xE621; // 
-    //const char sep =  '|';
-    const wchar_t ico_time = 0xF455; // 
-    const wchar_t ico_fire = 0xF2DB; //  
-    const wchar_t ico_tacho = 0xF0E4; // 
-    const wchar_t ico_temp = 0xF2C7; // 
-    const wchar_t ico_volume = 0xF028; // 
+    const wchar_t ico_time   = 0xF455;
+    const wchar_t ico_fire   = 0xF2DB;
+    const wchar_t ico_tacho  = 0xF0E4;
+    const wchar_t ico_temp   = 0xF2C7;
+    const wchar_t ico_volume = 0xF028;
 
-    wchar_t ico_battery;
+    int one_shot = (argc == 2 && strcmp("-1", argv[1]) == 0);
 
+    strlcpy(volume, "N/A", sizeof(volume));
+    vol_hdl = sioctl_open(SIO_DEVANY, SIOCTL_READ, 0);
+    if (vol_hdl != NULL) {
+        sioctl_ondesc(vol_hdl, vol_ondesc, &vol_state);
+        sioctl_onval(vol_hdl, vol_onval, &vol_state);
+    }
 
-    while(1) {
+    update_battery();
+    update_cpu_temp();
+    update_cpu_avg_speed();
+    update_cpu_base_speed();
+    update_fan_speed();
+    update_datetime();
+    print_status(ico_time, ico_fire, ico_tacho, ico_temp, ico_volume);
 
-        update_battery();
-        update_cpu_temp();
-        update_cpu_avg_speed();
-        update_cpu_base_speed();
-        update_fan_speed();
-        update_volume();
-        update_datetime();
+    if (one_shot) {
+        if (vol_hdl != NULL)
+            sioctl_close(vol_hdl);
+        return 0;
+    }
 
-        if(battery_onpower) {
-            ico_battery = 0xF1E6; // 
+    for (;;) {
+        struct pollfd pfds[8];
+        int nfds = 0, revents, ret;
+
+        if (vol_hdl != NULL)
+            nfds = sioctl_pollfd(vol_hdl, pfds, POLLIN);
+        ret = poll(pfds, nfds, 1000);
+
+        if (ret > 0 && vol_hdl != NULL) {
+            /* Early wakeup: volume changed — fire vol_onval, refresh time */
+            revents = sioctl_revents(vol_hdl, pfds);
+            if (revents & POLLHUP)
+                strlcpy(volume, "N/A", sizeof(volume));
+            update_datetime();
         } else {
-            ico_battery = 0xF240; // 
+            /* Timeout: full update */
+            update_battery();
+            update_cpu_temp();
+            update_cpu_avg_speed();
+            update_cpu_base_speed();
+            update_fan_speed();
+            update_datetime();
         }
 
-        printf(" %lc ", ico_battery);
-        printf("%s ", battery_percent);
-
-        printf(" %lc ", ico_temp);
-        printf("%s ", cpu_temp);
-
-        printf(" %lc ", ico_fire);
-        printf("%s ", cpu_avg_speed);
-
-        printf(" %lc ", ico_tacho);
-        printf("%s ", fan_speed);
-
-        printf(" %lc ", ico_volume);
-        printf("%s ", volume);
-
-        printf(" %lc ", ico_time);
-        printf("%s", datetime);
-
-        printf("\n");
-
-        fflush(stdout);
-        if(argc == 2)
-           if(strcmp("-1", argv[1]) == 0)
-                return 0;
-        usleep(1000000);
+        print_status(ico_time, ico_fire, ico_tacho, ico_temp, ico_volume);
     }
     return 0;
 }
