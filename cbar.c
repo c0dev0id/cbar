@@ -153,12 +153,13 @@ void update_cpu_temp() {
 }
 
 void update_battery() {
-    int fd;
+    static int fd = -1;
     struct apm_power_info pi;
 
-    if ((fd = open("/dev/apm", O_RDONLY)) == -1 ||
-            ioctl(fd, APM_IOC_GETPOWER, &pi) == -1 ||
-            close(fd) == -1) {
+    if (fd == -1)
+        fd = open("/dev/apm", O_RDONLY);
+    if (fd == -1 || ioctl(fd, APM_IOC_GETPOWER, &pi) == -1) {
+        if (fd != -1) { close(fd); fd = -1; }
         strlcpy(battery_percent, "N/A", sizeof(battery_percent));
         return;
     }
