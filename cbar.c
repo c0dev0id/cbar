@@ -262,7 +262,7 @@ print_status(wchar_t ico_time, wchar_t ico_fire, wchar_t ico_tacho,
     if (color_mode && battery_life >= 0 && battery_life < 10)
         printf("+@fg=1;");
     else if (color_mode && battery_life >= 0 && battery_life < 20)
-        printf("+@fg=3;");
+        printf("+@fg=2;");
     printf(" %lc ", ico_battery);
     printf("%s ", battery_percent);
     if (color_mode && battery_life >= 0 && battery_life < 20)
@@ -271,7 +271,7 @@ print_status(wchar_t ico_time, wchar_t ico_fire, wchar_t ico_tacho,
     if (color_mode && cpu_temp_val >= 78)
         printf("+@fg=1;");
     else if (color_mode && cpu_temp_val >= 68)
-        printf("+@fg=3;");
+        printf("+@fg=2;");
     printf(" %lc ", ico_temp);
     printf("%s ", cpu_temp);
     if (color_mode && cpu_temp_val >= 68)
