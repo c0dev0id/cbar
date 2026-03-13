@@ -14,7 +14,7 @@ build: clean
 opt: clean
 	${CC} ${OPTFLAGS} ${CFLAGS} -o cbar ${LIBS} cbar.c
 
-install:
+install: opt
 	install -s cbar /home/sdk/.bin/cbar
 
 clean:

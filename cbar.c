@@ -284,8 +284,8 @@ print_status(wchar_t ico_time, wchar_t ico_fire, wchar_t ico_tacho,
     printf(" %lc ", ico_tacho);
     printf("%s ", fan_speed);
 
-    printf(" %lc %4s", ico_rx, net_rx);
-    printf(" %lc %4s ", ico_tx, net_tx);
+    printf(" %lc %4s/s", ico_rx, net_rx);
+    printf(" %lc %4s/s ", ico_tx, net_tx);
 
     wchar_t ico_vol = (vol_state.muted || (vol_state.found && vol_state.val == 0))
         ? (wchar_t)0xF026   /* volume-off */
