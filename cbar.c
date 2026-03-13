@@ -27,7 +27,8 @@ static char fan_speed[32];
 static char cpu_base_speed[32];
 static char cpu_avg_speed[32];
 static char volume[32];
-static char net_rate[48];
+static char net_rx[8];
+static char net_tx[8];
 static char datetime[32];
 
 static bool battery_onpower = false;
@@ -199,10 +200,10 @@ void update_battery() {
 static void
 fmt_rate(char *buf, size_t len, uint64_t bytes)
 {
-    if (bytes >= 1048576)
-        snprintf(buf, len, "%.1fM", bytes / 1048576.0);
-    else if (bytes >= 1024)
-        snprintf(buf, len, "%.0fK", bytes / 1024.0);
+    if (bytes >= 1000000)
+        snprintf(buf, len, "%.0fM", bytes / 1000000.0);
+    else if (bytes >= 1000)
+        snprintf(buf, len, "%.0fK", bytes / 1000.0);
     else
         snprintf(buf, len, "%lluB", (unsigned long long)bytes);
 }
@@ -214,7 +215,8 @@ void update_net() {
     uint64_t rx = 0, tx = 0;
 
     if (getifaddrs(&ifas) == -1) {
-        strlcpy(net_rate, "N/A", sizeof(net_rate));
+        strlcpy(net_rx, "N/A", sizeof(net_rx));
+        strlcpy(net_tx, "N/A", sizeof(net_tx));
         return;
     }
     for (ifa = ifas; ifa != NULL; ifa = ifa->ifa_next) {
@@ -233,14 +235,13 @@ void update_net() {
         prev_rx = rx;
         prev_tx = tx;
         init = 1;
-        strlcpy(net_rate, "0B/0B", sizeof(net_rate));
+        strlcpy(net_rx, "0B", sizeof(net_rx));
+        strlcpy(net_tx, "0B", sizeof(net_tx));
         return;
     }
 
-    char rxbuf[16], txbuf[16];
-    fmt_rate(rxbuf, sizeof(rxbuf), rx - prev_rx);
-    fmt_rate(txbuf, sizeof(txbuf), tx - prev_tx);
-    snprintf(net_rate, sizeof(net_rate), "%s/%s", rxbuf, txbuf);
+    fmt_rate(net_rx, sizeof(net_rx), rx - prev_rx);
+    fmt_rate(net_tx, sizeof(net_tx), tx - prev_tx);
     prev_rx = rx;
     prev_tx = tx;
 }
@@ -255,7 +256,7 @@ void update_datetime() {
 
 static void
 print_status(wchar_t ico_time, wchar_t ico_fire, wchar_t ico_tacho,
-    wchar_t ico_temp, wchar_t ico_volume, wchar_t ico_net)
+    wchar_t ico_temp, wchar_t ico_volume, wchar_t ico_rx, wchar_t ico_tx)
 {
     wchar_t ico_battery = battery_onpower ? (wchar_t)0xF1E6 : (wchar_t)0xF240;
 
@@ -283,8 +284,8 @@ print_status(wchar_t ico_time, wchar_t ico_fire, wchar_t ico_tacho,
     printf(" %lc ", ico_tacho);
     printf("%s ", fan_speed);
 
-    printf(" %lc ", ico_net);
-    printf("%s ", net_rate);
+    printf(" %lc %4s", ico_rx, net_rx);
+    printf(" %lc %4s ", ico_tx, net_tx);
 
     wchar_t ico_vol = (vol_state.muted || (vol_state.found && vol_state.val == 0))
         ? (wchar_t)0xF026   /* volume-off */
@@ -309,7 +310,8 @@ int main(int argc, const char *argv[])
     const wchar_t ico_tacho  = 0xF0E4;
     const wchar_t ico_temp   = 0xF2C7;
     const wchar_t ico_volume = 0xF028;
-    const wchar_t ico_net    = 0xF0AC;
+    const wchar_t ico_rx     = 0xF063;  /* fa-arrow-down */
+    const wchar_t ico_tx     = 0xF062;  /* fa-arrow-up */
 
     int one_shot = 0;
     for (int i = 1; i < argc; i++) {
@@ -335,7 +337,7 @@ int main(int argc, const char *argv[])
     update_fan_speed();
     update_net();
     update_datetime();
-    print_status(ico_time, ico_fire, ico_tacho, ico_temp, ico_volume, ico_net);
+    print_status(ico_time, ico_fire, ico_tacho, ico_temp, ico_volume, ico_rx, ico_tx);
 
     if (one_shot) {
         if (vol_hdl != NULL)
@@ -368,7 +370,7 @@ int main(int argc, const char *argv[])
             update_datetime();
         }
 
-        print_status(ico_time, ico_fire, ico_tacho, ico_temp, ico_volume, ico_net);
+        print_status(ico_time, ico_fire, ico_tacho, ico_temp, ico_volume, ico_rx, ico_tx);
     }
     return 0;
 }
