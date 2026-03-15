@@ -383,11 +383,25 @@ int main(int argc, const char *argv[])
         if (ret > 0 && vol_hdl != NULL) {
             /* Early wakeup: volume changed — fire vol_onval, refresh time */
             revents = sioctl_revents(vol_hdl, pfds);
-            if (revents & POLLHUP)
+            if (revents & POLLHUP) {
+                sioctl_close(vol_hdl);
+                vol_hdl = NULL;
+                memset(&vol_state, 0, sizeof(vol_state));
                 strlcpy(volume, "N/A", sizeof(volume));
+            }
             update_datetime();
         } else {
             /* Timeout: full update */
+            if (vol_hdl == NULL) {
+                vol_hdl = sioctl_open(SIO_DEVANY, SIOCTL_READ, 0);
+                if (vol_hdl != NULL) {
+                    sioctl_ondesc(vol_hdl, vol_ondesc, &vol_state);
+                    sioctl_onval(vol_hdl, vol_onval, &vol_state);
+                    if (vol_state.found && vol_state.maxval > 0)
+                        snprintf(volume, sizeof(volume), "%.0f%%",
+                            (vol_state.val * 100.0) / vol_state.maxval);
+                }
+            }
             update_battery();
             update_cpu_temp();
             update_cpu_avg_speed();
