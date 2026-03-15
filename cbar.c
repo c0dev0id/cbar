@@ -22,6 +22,7 @@
 
 
 static char battery_percent[32];
+static char battery_power[16];
 static char cpu_temp[32];
 static char fan_speed[32];
 static char cpu_base_speed[32];
@@ -195,6 +196,26 @@ void update_battery() {
     }
     battery_life = pi.battery_life;
     snprintf(battery_percent, sizeof(battery_percent), "%d%%", pi.battery_life);
+
+    static int pow_dev = -1;
+    if (pow_dev == -1) {
+        struct sensor s;
+        size_t slen = sizeof(s);
+        for (pow_dev = 0; pow_dev < 20; pow_dev++) {
+            int m[5] = { CTL_HW, HW_SENSORS, pow_dev, SENSOR_WATTS, 0 };
+            if (sysctl(m, 5, &s, &slen, NULL, 0) != -1)
+                break;
+        }
+    }
+    struct sensor ps;
+    size_t pslen = sizeof(ps);
+    int pm[5] = { CTL_HW, HW_SENSORS, pow_dev, SENSOR_WATTS, 0 };
+    if (sysctl(pm, 5, &ps, &pslen, NULL, 0) != -1) {
+        double watts = ps.value / 1000000.0;
+        snprintf(battery_power, sizeof(battery_power), "%.0fW", watts);
+    } else {
+        battery_power[0] = '\0';
+    }
 }
 
 static void
@@ -266,6 +287,8 @@ print_status(wchar_t ico_time, wchar_t ico_fire, wchar_t ico_tacho,
         printf("+@fg=2;");
     printf(" %lc ", ico_battery);
     printf("%s ", battery_percent);
+    if (battery_power[0])
+        printf("(%s) ", battery_power);
     if (color_mode && battery_life >= 0 && battery_life < 20)
         printf("+@fg=0;");
 
