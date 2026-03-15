@@ -210,9 +210,13 @@ void update_battery() {
     struct sensor ps;
     size_t pslen = sizeof(ps);
     int pm[5] = { CTL_HW, HW_SENSORS, pow_dev, SENSOR_WATTS, 0 };
-    if (sysctl(pm, 5, &ps, &pslen, NULL, 0) != -1) {
-        double watts = ps.value / 1000000.0;
-        snprintf(battery_power, sizeof(battery_power), "%.0fW", watts);
+    if (sysctl(pm, 5, &ps, &pslen, NULL, 0) != -1 &&
+        !(ps.flags & (SENSOR_FINVALID | SENSOR_FUNKNOWN))) {
+        int watts = (int)(ps.value / 1000000.0 + 0.5);
+        if (watts > 0)
+            snprintf(battery_power, sizeof(battery_power), "%dW", watts);
+        else
+            battery_power[0] = '\0';
     } else {
         battery_power[0] = '\0';
     }
