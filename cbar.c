@@ -289,7 +289,7 @@ print_status(wchar_t ico_time, wchar_t ico_fire, wchar_t ico_tacho,
         printf("+@fg=1;");
     else if (color_mode && battery_life >= 0 && battery_life < 20)
         printf("+@fg=2;");
-    printf(" %lc ", ico_battery);
+    printf(" %lc", ico_battery);
     printf("%s ", battery_percent);
     if (battery_power[0])
         printf("(%s) ", battery_power);
@@ -300,27 +300,27 @@ print_status(wchar_t ico_time, wchar_t ico_fire, wchar_t ico_tacho,
         printf("+@fg=1;");
     else if (color_mode && cpu_temp_val >= 68)
         printf("+@fg=2;");
-    printf(" %lc ", ico_temp);
+    printf(" %lc", ico_temp);
     printf("%s ", cpu_temp);
     if (color_mode && cpu_temp_val >= 68)
         printf("+@fg=0;");
 
-    printf(" %lc ", ico_fire);
+    printf(" %lc", ico_fire);
     printf("%s ", cpu_avg_speed);
 
-    printf(" %lc ", ico_tacho);
+    printf(" %lc", ico_tacho);
     printf("%s ", fan_speed);
 
-    printf(" %lc %4s/s", ico_rx, net_rx);
-    printf(" %lc %4s/s ", ico_tx, net_tx);
+    printf(" %lc%4s/s", ico_rx, net_rx);
+    printf(" %lc%4s/s ", ico_tx, net_tx);
 
     wchar_t ico_vol = (vol_state.muted || (vol_state.found && vol_state.val == 0))
         ? (wchar_t)0xF026   /* volume-off */
         : ico_volume;
-    printf(" %lc ", ico_vol);
+    printf(" %lc", ico_vol);
     printf("%s ", volume);
 
-    printf(" %lc ", ico_time);
+    printf(" %lc", ico_time);
     printf("%s", datetime);
 
     printf("\n");
